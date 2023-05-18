@@ -13,14 +13,14 @@ import cv2 as cv
 import pandas as pd
 import re
 
-''' 定义一个处理订单的工人类
-可以输入文件路径，或者直接输入订单号列表
+''' 
+顺丰快递类
 '''
-class orderProcessor:
+class SFOrderProcessor:
     # 属性 输出文件后缀,用于区别源文件
-    suffix = "_check"
+    suffix = "_checked"
     # 输入excel文件的订单号 所在列的列名
-    order_name = "快递单号"
+    order_name = "顺丰快递单号"
     # 拆分单元大小 最大一次查询二十个
     split_num = 20 
     # 属性浏览器对象
@@ -37,6 +37,8 @@ class orderProcessor:
     regx = r"^SF[0-9]{10,20}$"
     # 文件全路径名
     fullpath = None
+    # 滑动验证码重试次数
+    retry = 3
     
     # 定义构造函数
     def __init__(self, input):
@@ -53,10 +55,10 @@ class orderProcessor:
         arrlist = [self.good_orders[i:i + self.split_num] for i in range(0,len(self.good_orders), self.split_num)]
         # 开始循环
         for item in arrlist:
-            try:
-                self.process(item)
-            except:
-                pass
+            #try:
+            self.process(item)
+            #except:
+            #    pass
             # 控制抓取频率，放置被封
             time.sleep(random.randint(5,8))
         # 完成后导出
@@ -151,7 +153,7 @@ class orderProcessor:
             slider_knob = self.driver.find_element(By.ID, "tcaptcha_drag_thumb")
 
         while bg_img is None:
-            bg = driver.find_element(By.ID, "slideBg")
+            bg = self.driver.find_element(By.ID, "slideBg")
             bg_img = bg.get_attribute('src')
             slider_knob = self.driver.find_element(By.ID, "tcaptcha_drag_thumb")
         g = requests.get(bg_img).content
@@ -170,9 +172,19 @@ class orderProcessor:
         actions.release()
         self.driver.switch_to.default_content()
         # 等待验证结果
-        result = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "route-list")))
+        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "route-list")))
         # 等待地图加载
         wait.until(EC.presence_of_element_located((By.CLASS_NAME, "map")))
+        # 如果一页超过十条，自动点击更多
+        
+        if len(orders) > 10:
+            fetch_more = self.driver.find_element(By.CLASS_NAME, 'fetch-more')
+            # 滚动到元素位置
+            self.driver.execute_script("arguments[0].scrollIntoView();", fetch_more)
+            # 防止加载动画还没结束就点击
+            time.sleep(1)
+            fetch_more.click()
+
         # 查询结果加载完成
         # 查找所有的.route-list元素
         route_list =  self.driver.find_elements(By.CLASS_NAME, "route-list")
@@ -198,9 +210,10 @@ class orderProcessor:
         
 
 
-try:
-  path = sys.argv[1]
-except:
-    print('请输入文件路径')
-    exit()
-worker = orderProcessor(path)
+if __name__ == '__main__':
+    try:
+      path = sys.argv[1]
+    except:
+        print('请输入文件路径')
+        exit()
+    SFOrderProcessor(path)
